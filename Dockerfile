@@ -8,7 +8,7 @@ COPY *.go ./
 
 RUN go build -o main .
 
-# Stage 2, imagem final mais leve
+# Stage 2, create a smaller final image
 FROM debian:bookworm-slim
 
 WORKDIR /app
