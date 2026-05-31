@@ -1,0 +1,47 @@
+name: CD Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_ref:
+        description: 'Docker image (e.g. username/go-math-api:abc123)'
+        required: true
+      ec2_host:
+        description: 'EC2 public IP or DNS'
+        required: true
+      ssh_username:
+        description: 'EC2 SSH username (e.g. student01)'
+        required: true
+        default: 'student01'
+
+jobs:
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    environment: student-deploy  # <-- add required reviewers in repo settings
+
+    steps:
+      - name: Install sshpass
+        run: sudo apt-get update && sudo apt-get install -y sshpass
+
+      - name: Deploy container
+        run: |
+          PORT="8080"
+          sshpass -p "${{ secrets.STUDENT_PASSWORD }}" \
+            ssh -o StrictHostKeyChecking=no \
+                "${{ inputs.ssh_username }}@${{ inputs.ec2_host }}" \
+                "IMAGE_REF='${{ inputs.image_ref }}' PORT='${PORT}' bash -s" << 'EOF'
+          set -euo pipefail
+
+          echo "Pulling image: ${IMAGE_REF}"
+          docker pull "${IMAGE_REF}"
+
+          echo "Stopping any container publishing port ${PORT} (if any)..."
+          docker ps -q --filter "publish=${PORT}" | xargs -r docker stop
+
+          echo "Running container on host port ${PORT} -> container 8080..."
+          docker run -d -p "${PORT}:8080" "${IMAGE_REF}"
+
+          echo "Current containers:"
+          docker ps --format 'table {{.ID}}\t{{.Image}}\t{{.Ports}}\t{{.Status}}'
+          EOF
